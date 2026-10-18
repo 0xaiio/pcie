@@ -1,5 +1,7 @@
 # 架构设计文档
 
+本文档描述系统的技术栈选型、模块划分、数据模型与架构视图。实现路线见 [系统实现说明](./implementation.md)，运行与部署见 [部署文档](./deployment.md)。
+
 本项目是一个前端重度驱动的 Web 文档工作区。浏览器承担主要的文件处理与交互职责，本地 Node 服务负责少量需要宿主机能力的任务，包括 AI gateway、PDF 压缩、Word 原生 PDF 导出、旧版 `.doc` 提取、mupdf PDF 转图与本地 PaddleOCR 调度。
 
 ## 1. 技术栈选型
@@ -60,7 +62,76 @@
 - `src/server/word-conversion.ts`：旧版 `.doc` 文本提取、HTML 转义与结构化包装
 - `src/server/word-pdf-native.ts`：原生 Word→PDF 转换后端（Word COM、LibreOffice CLI）的探测与执行
 
-## 3. 架构视图
+## 3. 数据模型
+
+系统没有远端数据库，核心数据模型分为前端工作区状态与服务端运行时状态两类。
+
+### 3.1 文件领域模型
+
+定义于 [src/features/files/types.ts](../src/features/files/types.ts)：
+
+```ts
+export type AppFileType = 'pdf' | 'image' | 'word';
+
+export interface AppFile {
+  id: string;           // 工作区内唯一标识
+  file: File;           // 浏览器 File 对象（二进制内容）
+  name: string;         // 显示名，可被重命名
+  size: number;         // 字节数
+  type: AppFileType;    // 由扩展名/MIME 识别后写入
+  previewUrl?: string;  // 可选预览地址（blob URL）
+}
+
+export type SortKey = 'name' | 'date' | 'size';
+export type SortOrder = 'asc' | 'desc';
+
+export interface SortConfig {
+  key: SortKey;
+  order: SortOrder;
+}
+```
+
+工作区按类型分三组维护 `AppFile[]`，每组配一个选中集合 `Set<string>` 与一个可空的 `SortConfig`；人工拖拽或行内移动后会清空该组排序配置，回到人工顺序（编排逻辑见 [src/App.tsx](../src/App.tsx)）。
+
+### 3.2 运行时配置摘要
+
+定义于 [src/lib/ai-types.ts](../src/lib/ai-types.ts)，由 `/api/runtime-config` 输出，只暴露"是否已配置"而不暴露原始 key：
+
+```ts
+interface RuntimeConfig {
+  aiProviders: Array<{
+    id: 'gemini' | 'openai' | 'deepseek';
+    label: string;
+    configured: boolean;     // 对应环境变量是否存在非空 key
+    supportsVision: boolean; // 是否支持图片输入
+  }>;
+  localImageOcr: {
+    engine: string;         // 如 'PaddleOCR'
+    available: boolean;     // install-state + venv + runner 均就绪
+    offlineReady: boolean;  // 离线模型已预热
+    detail: string;         // 未就绪时的可执行提示
+  };
+}
+```
+
+### 3.3 AI 请求与响应
+
+同样定义于 [src/lib/ai-types.ts](../src/lib/ai-types.ts)，经 `normalizeAiChatRequest()` / `normalizeAiOcrRequest()` 做严格字段校验后才进入 provider 调用：
+
+```ts
+interface AiRequestFile { data: string; mimeType: string; name: string; } // data 为 base64
+interface AiChatRequestBody { prompt: string; messages: AiChatMessage[]; files: AiRequestFile[]; }
+interface AiOcrRequestBody { file: AiRequestFile; }
+interface AiTextResponse { text: string; }
+```
+
+### 3.4 服务端短生命周期作业
+
+PDF 压缩作业在 `server.ts` 中以进程内 `Map` 跟踪，结构为 `{ status, inputPath, outputPath, error? }`，随服务重启丢弃，不持久化。上传临时文件位于 `uploads/`，均在请求结束后清理。
+
+本地 OCR 安装状态持久化于 `.local/paddleocr/install-state.json`（字段含 `engine`、`ready`、`offlineReady`、`detail`、`pythonExecutable`、`updatedAt`，见 [src/server/local-ocr.ts](../src/server/local-ocr.ts)），服务端据此判断本地 OCR 是否可用。
+
+## 4. 架构视图
 
 [查看架构图源码](./puml/architecture.puml)
 
@@ -109,7 +180,7 @@ Backend --> Backend : .doc 文本提取 / PDF 转图 / 压缩任务
 @enduml
 ```
 
-## 4. 软件工程 4+1 视图
+## 5. 软件工程 4+1 视图
 
 本项目已补齐软件工程规范中的 `4+1` 架构视图，独立维护在 [4+1 架构视图文档](./4plus1-views.md) 中，并配套 UML 源码文件放在 `docs/puml/`：
 
@@ -127,4 +198,4 @@ Backend --> Backend : .doc 文本提取 / PDF 转图 / 压缩任务
 
 ---
 
-*更具体的实现路线请参考 [技术与实现文档](./implementation.md)。开发与运行方式请参考 [开发环境配置](./development.md)。*
+*更具体的实现路线请参考 [系统实现说明](./implementation.md)。安装与启动方式请参考 [安装手册](./installation.md) 与 [快速开始](./quick-start.md)，生产部署请参考 [部署文档](./deployment.md)。*

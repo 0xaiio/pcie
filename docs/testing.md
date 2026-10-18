@@ -1,6 +1,6 @@
 # 测试文档
 
-本文档说明本项目的自动化测试边界与人工回归清单，用于保障文件处理、AI gateway、本地 OCR 与核心交互流程的稳定性。
+本文档说明本项目的自动化测试边界与人工回归清单，用于保障文件处理、AI gateway、本地 OCR 与核心交互流程的稳定性。提交前的验证要求见 [贡献守则](./contributing.md#3-提交前验证)。
 
 ## 1. 测试策略
 
@@ -98,3 +98,9 @@ npm run smoke:ocr
 | TC-17A | 本地 OCR bootstrap 缺失 | 删除或临时重命名 `.local/paddleocr/` 后执行图片 OCR | 界面提示安装 Python `3.9+` 并重跑 `npm install` 或 `npm run setup:ocr` | [ ] |
 | TC-18 | 生产环境运行时注入 | 在构建产物上设置 AI key 后通过 `npm run start` 启动并访问 `/api/runtime-config` | 服务返回 provider 与本地 OCR readiness 摘要，而不是原始 key | [ ] |
 | TC-19 | 多 provider 顺序回退 | 同时配置多个 AI key，并让首个 provider 故意失败 | 系统自动回退到后续可用 provider，界面无需手动切换模型 | [ ] |
+
+## 3. 相关文档
+
+- 测试分层对应的实现细节见 [系统实现说明](./implementation.md)
+- 接口行为契约见 [接口说明](./api.md)
+- 提交前验证流程见 [贡献守则](./contributing.md)

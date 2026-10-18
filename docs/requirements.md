@@ -1,5 +1,7 @@
 # 需求分析文档
 
+本文档说明系统的建设目标、用户角色、功能与非功能需求边界。架构选型见 [架构设计文档](./architecture.md)，实现细节见 [系统实现说明](./implementation.md)，测试对应关系见 [测试文档](./testing.md)。
+
 本项目面向需要在浏览器内完成文档整理、转换、提取与导出的用户，目标是在本地优先前提下提供统一工作区与按需 AI 能力。
 
 ## 1. 用户角色
@@ -74,6 +76,17 @@ User --> UC_Export
 @enduml
 ```
 
+## 5. 需求与文档追踪
+
+| 需求域 | 设计文档 | 实现文档 | 测试覆盖 |
+|:---|:---|:---|:---|
+| 统一工作台与跨文件管理 | [架构 · 模块划分](./architecture.md#2-模块划分) | [实现 · 文件交互](./implementation.md#2-文件交互与工作区行为) | [测试 · 纯逻辑回归](./testing.md#1-测试策略) |
+| 图片处理与图像增强 | [架构 · 技术栈](./architecture.md#1-技术栈选型) | [实现 · 图像增强](./implementation.md#5-图像增强实现) | [测试 · 人工回归](./testing.md#2-人工回归清单) |
+| PDF 深度编辑 | [架构 · 模块划分](./architecture.md#2-模块划分) | [实现 · 核心状态](./implementation.md#1-核心状态与共享类型) | [测试 · 人工回归](./testing.md#2-人工回归清单) |
+| 文本提取与文档转换 | [架构 · 技术栈](./architecture.md#1-技术栈选型) | [实现 · Word 转 PDF](./implementation.md#4-word-转-pdf-实现路线) | [测试 · 人工回归](./testing.md#2-人工回归清单) |
+| 集成式 AI 助手 | [架构 · 服务端](./architecture.md#13-本地服务端bff--轻代理) | [实现 · AI 助手](./implementation.md#6-ai-助手与本地-ocr) | [测试 · 应用层回归](./testing.md#1-测试策略) |
+| 打包导出 | [架构 · 数据模型](./architecture.md#3-数据模型) | [实现 · 共享类型](./implementation.md#1-核心状态与共享类型) | [测试 · 纯逻辑回归](./testing.md#1-测试策略) |
+
 ---
 
-*设计与选型参考请见 [架构设计文档](./architecture.md)。*
+*设计与选型参考请见 [架构设计文档](./architecture.md)。4+1 视图见 [4plus1-views.md](./4plus1-views.md)。*

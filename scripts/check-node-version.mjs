@@ -19,6 +19,6 @@ if (!supported) {
   console.error(
     `Unsupported Node.js ${process.versions.node}. This project requires Node.js 20.19+ or 22.13+.`
   );
-  console.error("See docs/development.md and switch Node with nvm/fnm before running npm install.");
+  console.error("See docs/installation.md and switch Node with nvm/fnm before running npm install.");
   process.exit(1);
 }

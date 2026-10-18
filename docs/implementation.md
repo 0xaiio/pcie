@@ -1,6 +1,6 @@
-# 技术与实现文档
+# 系统实现说明
 
-本文档聚焦系统的实现结构与关键技术路线，用于说明模块边界、处理链路与主要实现策略。
+本文档聚焦系统的实现结构与关键技术路线，用于说明模块边界、处理链路与主要实现策略。宏观架构见 [架构设计文档](./architecture.md)，接口契约见 [接口说明](./api.md)。
 
 ## 1. 核心状态与共享类型
 
@@ -158,3 +158,7 @@ AI 助手默认支持三类 provider，并按固定顺序尝试：
 6. [src/server/word-pdf-native.ts](../src/server/word-pdf-native.ts)：负责原生 Word→PDF 转换后端的探测、COM/LibreOffice 调用与输出验证。
 
 这种模块划分使 `server.ts` 主要承担路由与请求流转职责，而可预测、可复用的纯逻辑则通过独立模块与自动化测试进行验证。
+
+---
+
+*相关文档：[需求分析](./requirements.md)、[架构设计](./architecture.md)、[UI 设计](./ui-design.md)、[接口说明](./api.md)、[测试文档](./testing.md)。*

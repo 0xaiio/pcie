@@ -1,86 +1,79 @@
-# 多功能文件处理系统 (Web App)
+# PCIE · 多功能文件处理系统
 
-PCIE 是一个本地优先的 Web 文档工作区。上传、排序、转换、提取、增强、导出，在同一界面内完成。
+PCIE 是一个**本地优先**的 Web 文档工作区：上传、排序、转换、提取、增强、导出，在同一界面内完成。工作区围绕 PDF、图片、Word 三类文件展开，核心处理在浏览器或本机服务进程中完成；AI 能力仅在配置 key 后按需启用。
 
-工作区围绕三类文件展开：PDF、图片、Word。文件列表支持自然排序、拖拽重排、行内上移/下移、重命名、复制、批量删除与 Zip 导出。图片与 Word 的批量转 PDF 流程都提供进度卡片；Word 转 PDF 会显示已用时长与正在使用的转换方式。Word 转 PDF 采用质量优先的本地链路：`本地 Microsoft Word 原生导出 -> LibreOffice CLI -> 浏览器 HTML fallback`；旧版 `.doc` 文档通过服务端文本提取链路参与转换。
-
-首页采用工作台入口结构，下图展示了应用的首页初始状态：
+首页初始状态如下（截图存放于 [docs/assets/homepage-initial-state.png](./docs/assets/homepage-initial-state.png)）：
 
 ![PCIE homepage initial state](./docs/assets/homepage-initial-state.png)
 
-首页的首屏由三部分组成：顶部 Hero 负责说明 `Local-first by default` 与 `AI only when configured` 这两个产品前提；中段 `Workspace Upload` 面板承接文件导入；下方 capability strip 以 PDF、Image、Word 三条 workflow 概括后续能力。首页使用单一上传入口，支持 `PDF`、`DOC / DOCX`、`PNG / JPG / JPEG` 三类格式，并通过 `Choose files` 按钮与拖拽提示引导用户进入工作区。
+## 克隆项目（SSH）
 
-前端构建采用按需加载策略。`PdfEditor`、`AiAssistant`、`ImageEnhanceModal`、`FilePreview` 通过 `React.lazy()` 独立拆包；`pdf-lib`、`jszip`、`mammoth`、`browser-image-compression` 与部分浏览器端转换依赖通过运行时 `import()` 加载。Vite 会把 `pdf-lib`、`pdfjs-dist`、`mammoth`、`html2canvas`、`tfjs` 等较重依赖拆分为独立 vendor chunk，并将 `chunkSizeWarningLimit` 设为 `900`，以便将构建告警集中到真正异常的产物上。
+```bash
+git clone git@github.com:0xaiio/pcie.git
+cd pcie
+```
 
-Word 转 PDF 支持三类可选链路：
-- `Microsoft Word 原生导出`（`word-com`）：Windows 环境下的最高保真方案，通过 PowerShell 调用 Word COM 自动化。
-- `LibreOffice CLI`（`libreoffice-cli`）：适合跨平台与批处理环境，通过 `soffice --headless --convert-to pdf` 执行。
-- `浏览器 HTML fallback`：不依赖本地 Office 组件的兜底方案，通过 `mammoth`（DOCX）或服务端 `word-extractor`（旧版 `.doc`）提取文本后在浏览器中渲染为 PDF。
+## 安装与启动
 
-此外，`docx2pdf`、`pywin32`、UNO / `unoconv` 等 Python 方案本质上是对 Word 或 LibreOffice 的调用包装，项目不做内置集成，用户可按需自行扩展。
+```bash
+# 1. 安装依赖（postinstall 会自动执行 npm run setup:ocr，引导本地 PaddleOCR 运行时）
+npm install
 
-Word 浏览器导出链路使用隐藏宿主容器承载 HTML 内容，使传入 `html2pdf` 的源节点保持在普通文档流中，保证本地渲染与布局稳定性。
+# 2. 启动开发服务器，默认访问 http://localhost:3000
+npm run dev
+```
 
-## PCIE 宣传语
+- 依赖要求：Node.js `v20.19+` 或 `v22.13+`、Python `3.9+`（本地 OCR）；PDF 压缩需要 Ghostscript。
+- 详细环境说明见 [安装手册](./docs/installation.md)；首次运行排错见 [快速开始](./docs/quick-start.md) 与 [常见问题](./docs/faq.md)。
 
-- 中文宣传语
-> 本地优先，AI 自选。PCIE，为你的文档加速。
+## 文档索引
 
-- 英文宣传语
-> "Local-first, AI-optional. PCIE — Your documents, accelerated."
+完整文档体系位于 `docs/` 目录，按用户篇与开发者篇组织。
 
-## 命名诠释：PCIE
+### 用户篇
 
-将 PCIE 拆解为四大核心特性，每个字母恰好对应系统的一个关键能力，同时也呼应计算机中 PCIe 总线 高速、直连、按需扩展的特点：
+| 文档 | 说明 |
+|:---|:---|
+| [安装手册](./docs/installation.md) | 环境要求、依赖安装、本地 OCR 引导与安装期问题排查 |
+| [快速开始](./docs/quick-start.md) | 从克隆到首次上传的最小路径，含 `.env` 配置与常用命令 |
+| [使用手册](./docs/user-manual.md) | 各文件类型的工作区操作指南：导入、排序、转换、增强、AI 助手、导出 |
+| [常见问题](./docs/faq.md) | 安装、启动、AI key、OCR、Word 转 PDF 等高频问题的定位与处理 |
 
-- **P** — Privacy & PDF（隐私与 PDF 中枢）
-系统以本地优先为基石，你的文件从不离浏览器，隐私完全由你掌控。同时，所有处理围绕 PDF 展开：图片、Word 均能转为 PDF，形成统一的文档中枢。
+### 开发者篇
 
-- **C**: Convert, Compress, Combine（转换、压缩、合并）
-这是工作区里的“变形”能力：图片转 PDF、Word 转 PDF、PDF 压缩、多 PDF 合并，一站式完成，无需跳转多个工具。
+| 文档 | 说明 |
+|:---|:---|
+| [需求分析](./docs/requirements.md) | 用户角色、功能需求、非功能需求与核心用例 |
+| [系统设计：架构与数据模型](./docs/architecture.md) | 技术栈选型、模块划分、数据模型与架构视图 |
+| [UI 设计](./docs/ui-design.md) | 首页结构、设计 token、组件清单与交互状态规范 |
+| [4+1 架构视图](./docs/4plus1-views.md) | 逻辑 / 开发 / 进程 / 物理 / 场景五视图及 UML 源码索引 |
+| [系统实现说明](./docs/implementation.md) | 状态编排、排序、Word 转 PDF 链路、图像增强、AI 与 OCR 的实现细节 |
+| [接口说明](./docs/api.md) | 服务端 API 路由、请求响应契约与错误码 |
+| [测试文档](./docs/testing.md) | 自动化测试分层、入口与人工回归清单 |
+| [部署文档](./docs/deployment.md) | 生产构建、预览、云端部署与运行时配置 |
+| [贡献守则](./docs/contributing.md) | 分支与提交规范、提交前验证、文档同步规则 |
 
-- **I**: Image & Intelligence（图像增强与智能随选）
-支持本地增强图片，并把“图像理解”和“语言智能”拆分为两条独立路径：图片 OCR 通过本地 PaddleOCR 离线完成，不依赖任何云端 key；AI 助手在需要总结、问答或多文档分析时，通过已配置的 Gemini、OpenAI、DeepSeek 自动选择首个可用 provider。
+### 其他资料
 
-- **E**: Extract & Export（提取与统一导出）
-提取页面、提取图像、提取文本，最后将处理结果统一打包导出，让整个流程有始有终，干净利落。
+| 文档 | 说明 |
+|:---|:---|
+| [安全审计报告](./docs/safety-review.md) | 2026-05-31 全量源码静态安全审计结论与修复优先级 |
+| [重构档案](./docs/refactor/refactor.md) | 历史重构决策记录，不作为现状说明 |
+| [UML 源码目录](./docs/puml/) | 上述文档引用的 PlantUML 源码文件 |
 
-就像 PCIe 总线为计算机部件提供高速直连通道一样，PCIE 为你的文档处理搭建了一条私密、灵活、高效的一站式流水线。
+## 常用命令速查
 
-## 📖 工程项目规范指引目录
+| 命令 | 用途 |
+|:---|:---|
+| `npm run dev` | 开发模式（Vite 中间件 + Express 同端口联调） |
+| `npm run build` | 生产构建，输出 `dist/` |
+| `npm run preview` | 生产预览（需先构建，启动完整 Express 服务） |
+| `npm run preview:static` | 纯静态前端预览 |
+| `npm test` | 自动化测试（`test:logic` + `test:app`） |
+| `npm run lint` | TypeScript 类型检查（`tsc --noEmit`） |
+| `npm run setup:ocr` | 手动补齐本地 PaddleOCR 运行时 |
+| `npm run smoke:ocr` | 本地 OCR 冒烟验证 |
 
-出于现代软件工程维护的高要求以及防内容分发重复。一切详尽系统的操作、技术路线和测试方法均位于本项目的 `docs/` 目录下。请通过下列本地相对链接进行进一步的探讨与阅读：
+## 许可证
 
-| 领域 | 文档访问地址 | 详情说明 |
-|:---|:---|:---|
-| **新手指南 / 用户篇** | [用户手册 (User Manual)](./docs/user-manual.md) | 关于如何使用本应用的核心指引，介绍各种文件（PDF/Word/图像变清晰）的操作步骤。 |
-| **产品与设计 / 需求篇** | [需求分析文档 (Requirements)](./docs/requirements.md) | 深入解析该系统为什么而建，用户角色，以及核心功能的边界和用例。 |
-| **技术底座 / 架构篇** | [架构设计文档 (Architecture)](./docs/architecture.md) | 解析底层所采用的技术集合以及前后端的切分流转关系。 |
-| **软件工程 / 4+1 视图** | [4+1 架构视图文档 (4+1 Views)](./docs/4plus1-views.md) | 以逻辑视图、开发视图、进程视图、物理视图和场景视图描述系统，并附 UML 图源码。 |
-| **运行与编译 / 开发环境搭建** | [开发环境配置指导 (Development)](./docs/development.md) | 如果你需要克隆本机并在本地机器将此代码运行起来或开发，必读的环境搭建步骤。 |
-| **实现思路 / 技术原理** | [技术与实现文档 (Implementation)](./docs/implementation.md) | 最底层的核心技术实现、疑难设计与关键组件说明。 |
-| **质量保证 / 测试篇** | [集成与人工测试方案 (Testing)](./docs/testing.md) | 发版部署前必须的用例追踪清单，以维持产品的极高稳定性。 |
-
-> 注：关于各类详细的 UML 图片/系统交互图等物理源码也保存在 `docs/puml/` 目录中。
-
-开发模式使用 `npm run dev`，默认监听 `http://localhost:3000`；如果端口已被占用，服务会自动选择下一个可用端口并在终端打印实际访问地址。
-
-生产预览使用 `npm run preview`，它会以 `NODE_ENV=production` 启动完整的 Express + API 服务器并直接服务 `dist/` 产物；如果只需纯静态前端预览，可使用 `npm run preview:static`。预览生产包时，建议顺手打开 AI 增强、PDF 编辑、预览、OCR 与 AI 对话入口，确认按需下载的功能块能够正常加载。
-
-自动化回归通过 `npm test` 运行，覆盖文件领域纯逻辑、文件列表 UI、自然排序与行内移动、图片/Word 转 PDF 进度、旧版 `.doc` 提取辅助逻辑、PDF 页操作、前端运行时配置加载，以及服务端 AI provider fallback、本地 OCR 运行时配置与 PDF 压缩辅助逻辑。开发期诊断与手工验证脚本位于 `scripts/experiments/`，按 `diagnostics/`、`manual/`、`spikes/` 分类保存，不进入默认测试流水线。
-
-如果这是从 Google AI Studio 导出的项目，请额外注意：AI Studio 托管环境通常只会替它自己的 Gemini 能力注入密钥；本地运行时如果没有在项目根目录配置可用的 `.env`，你仍然需要自行提供 `GEMINI_API_KEY`、`OPENAI_API_KEY` 或 `DEEPSEEK_API_KEY` 中的一个或多个。
-
-AI 与 OCR 配置速览：
-- 支持的 AI provider 默认尝试顺序是 `Gemini -> OpenAI / ChatGPT -> DeepSeek`。如果你同时配置了多个 key，AI 助手会按这个顺序使用首个可完成当前任务的 provider。
-- 获取独立 Key：Gemini 在 Google AI Studio 申请 <https://aistudio.google.com/app/apikey>；OpenAI / ChatGPT 在 OpenAI Platform 申请 <https://platform.openai.com/api-keys>；DeepSeek 在 DeepSeek Platform 申请 <https://platform.deepseek.com/api_keys>。
-- 图片 OCR 不依赖这些 AI key。它通过本地 PaddleOCR 运行时执行；`npm install` 会自动执行 `npm run setup:ocr`，创建项目内的 Python 虚拟环境、安装 PaddlePaddle / PaddleOCR，并预热离线模型。
-- 如需快速验证本地 OCR 运行时本身，可执行 `npm run smoke:ocr`。该命令会补齐本地 PaddleOCR bootstrap、生成一张样例图片，并输出一次真实 OCR 请求的耗时与识别结果预览。
-- 为了让本地 OCR bootstrap 成功，机器上需要预先安装 Python `3.9+`。如果安装阶段因为 Python 缺失或网络原因中断，可以在补齐环境后手动重跑 `npm run setup:ocr`。
-- 本地运行 AI 助手时，在项目根目录创建 `.env` 并写入一个或多个 key，例如 `GEMINI_API_KEY=...`、`OPENAI_API_KEY=...`、`DEEPSEEK_API_KEY=...`，然后执行 `npm run dev`。
-- 如果 `npm run dev` 已经先启动、随后才补建 `.env`，`/api/runtime-config` 会在后续 AI 请求时重新读取该文件；刷新页面或重新打开 AI 助手即可。图片 OCR 的可用性取决于本地 PaddleOCR runtime 是否完成安装。
-- 云端部署时，无需改前端代码；只需在平台环境变量里设置同名 AI key。`npm run start` 启动的 `server.ts` 会在服务端 `/api/ai/chat` gateway 中按顺序选择 provider，而图片 OCR 则通过本地 `/api/ocr/image` route 调用 PaddleOCR，浏览器不会直接拿到这些原始 key。
-- AI 相关报错会区分“API key 被拒绝”“配额/速率限制”“AI provider 网络不可达”“模型不可用”或“请求参数不合法”；本地 OCR 报错会区分 Python / PaddleOCR 未安装、离线模型未预热或本地 OCR runner 异常。
-
----
-*本项目不强制绑定远端的云端数据库或者依赖云侧持久化存储，核心在于使用浏览器内置机能（`tf.js`, Web Workers 等）保护您的重要事务文档数据安全。*
+[MIT License](./LICENSE)，Copyright © 2026 0xaiio。
