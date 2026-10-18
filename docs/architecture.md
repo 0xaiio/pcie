@@ -31,7 +31,7 @@
 6. `/api/ai/chat` AI gateway 调用
 7. `/api/runtime-config` 运行时摘要输出
 
-`/api/runtime-config` 只返回“哪些 AI provider 已配置”与“本地 OCR runtime 是否就绪”的摘要，不向浏览器暴露原始第三方 API key。开发模式下，Vite 中间件与 HMR WebSocket 统一挂载到同一个 HTTP Server 上，并在默认端口被占用时自动选择下一个可用端口。
+`/api/runtime-config` 只返回“哪些 AI provider 已配置”与“本地 OCR runtime 是否就绪”的摘要，不向浏览器暴露原始第三方 API key。开发模式下，Vite 中间件与 HMR WebSocket 统一挂载到同一个 HTTP Server 上，并在默认端口被占用时自动选择下一个可用端口；服务绑定成功后会自动在默认浏览器中打开应用页面（`AUTO_OPEN=false` 可关闭）。
 
 ## 2. 模块划分
 
@@ -56,6 +56,7 @@
 ### 2.3 服务端辅助模块
 
 - `src/server/compression.ts`：PDF 压缩等级映射、任务 ID 生成与 Ghostscript 命令拼装
+- `src/server/auto-open.ts`：启动后浏览器自动打开的策略判断（`AUTO_OPEN` / CI）与跨平台启动命令拼装
 - `src/server/runtime-config.ts`：运行时配置摘要读取
 - `src/server/ai.ts`：AI provider 顺序尝试、能力判断与对话请求组装
 - `src/server/local-ocr.ts`：本地 PaddleOCR runtime 状态探测与图片 OCR 调度

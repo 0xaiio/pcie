@@ -22,6 +22,7 @@
 
 - 目标：描述仓库结构与开发期模块边界。
 - 重点：`src/features/files`、`src/server`、`scripts/local-ocr` 的职责归位。
+- 启动行为（端口绑定顺延、浏览器自动打开）属于 `server.ts` 与 `src/server/auto-open.ts` 的职责，详见 [系统实现说明 · 启动行为](./implementation.md#8-启动行为端口绑定与浏览器自动打开)。
 - UML 源码： [puml/4plus1-development-view.puml](./puml/4plus1-development-view.puml)
 
 ## 4. 进程视图（Process View）

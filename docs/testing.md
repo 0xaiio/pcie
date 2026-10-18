@@ -25,7 +25,7 @@ npm run test:app
 ```
 
 - `npm run test:logic`：运行 `src/features/files/file-utils.test.ts`
-- `npm run test:app`：运行 Vitest 应用层测试，覆盖文件列表交互、排序与行内移动、图片 / Word 转 PDF 进度、`PdfEditor` 页操作、前端运行时配置加载、服务端 AI provider 顺序回退、本地 OCR 调度、PDF 压缩辅助逻辑与旧版 `.doc` 提取辅助逻辑
+- `npm run test:app`：运行 Vitest 应用层测试，覆盖文件列表交互、排序与行内移动、图片 / Word 转 PDF 进度、`PdfEditor` 页操作、前端运行时配置加载、服务端 AI provider 顺序回退、本地 OCR 调度、PDF 压缩辅助逻辑、旧版 `.doc` 提取辅助逻辑与浏览器自动打开策略（`src/server/auto-open.app.test.ts`）
 
 兼容性说明：`npm run test:ui` 保留为 `npm run test:app` 的别名。
 
@@ -93,9 +93,12 @@ npm run smoke:ocr
 ### 模块六：运行时与环境回归
 | 用例编号 | 用例名称 | 操作动作 | 预期结果 | 状态 |
 |----------|----------|----------|----------|------|
-| TC-16 | 开发端口自动回退 | 占用 `3000` 后再次执行 `npm run dev` | 新实例自动选择新的可用端口，并在终端输出地址 | [ ] |
+| TC-16 | 开发端口自动回退 | 占用 `3000` 后再次执行 `npm run dev` | 新实例自动选择新的可用端口，终端输出 `Port 3000 is busy, using http://localhost:<实际端口> instead.` 与 `Server running on http://localhost:<实际端口>` | [ ] |
+| TC-16A | 启动后自动打开浏览器 | 执行 `npm run dev` 并观察终端与桌面 | 启动成功后默认浏览器自动打开 `http://localhost:<最终端口>`，终端打印 `Opening <url> in your default browser...` | [ ] |
+| TC-16B | 关闭自动打开浏览器 | 以 `AUTO_OPEN=false npm run dev` 启动 | 不弹出浏览器，终端打印 `Browser auto-open is disabled. Visit <url> manually.`，服务正常启动 | [ ] |
 | TC-17 | 缺失 AI Key 启动 | 删除或临时重命名 `.env` 后执行 `npm run dev` | 首页与基础文件处理功能正常，AI 助手提示需要配置 key，本地 OCR 仍可用 | [ ] |
-| TC-17A | 本地 OCR bootstrap 缺失 | 删除或临时重命名 `.local/paddleocr/` 后执行图片 OCR | 界面提示安装 Python `3.9+` 并重跑 `npm install` 或 `npm run setup:ocr` | [ ] |
+| TC-17A | 本地 OCR bootstrap 缺失 | 删除或临时重命名 `.local/paddleocr/` 后执行图片 OCR | 界面提示安装 Python `3.9–3.13` 并重跑 `npm install` 或 `npm run setup:ocr` | [ ] |
+| TC-17B | 不受支持的 Python 版本 | 仅存在 Python 3.14+ 时执行 `npm run setup:ocr` | 引导脚本直接报错并提示 PaddlePaddle CPU wheel 支持 `3.9–3.13`，建议使用 `PCIE_PYTHON` 指定解释器；不进入 pip 安装阶段 | [ ] |
 | TC-18 | 生产环境运行时注入 | 在构建产物上设置 AI key 后通过 `npm run start` 启动并访问 `/api/runtime-config` | 服务返回 provider 与本地 OCR readiness 摘要，而不是原始 key | [ ] |
 | TC-19 | 多 provider 顺序回退 | 同时配置多个 AI key，并让首个 provider 故意失败 | 系统自动回退到后续可用 provider，界面无需手动切换模型 | [ ] |
 

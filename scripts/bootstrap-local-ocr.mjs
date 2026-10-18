@@ -14,7 +14,10 @@ const localOcrStateFile = path.join(localOcrRoot, 'install-state.json');
 const warmupScript = path.join(projectRoot, 'scripts', 'local-ocr', 'warmup.py');
 
 const requiredPythonMajor = 3;
-const requiredPythonMinor = 9;
+const minSupportedPythonMinor = 9;
+// PaddlePaddle CPU wheels are published for CPython 3.9-3.13.
+// Python 3.14+ fails deep inside pip with "from versions: none", so gate it here.
+const maxSupportedPythonMinor = 13;
 const paddlePaddleVersion = '3.2.0';
 
 function log(message) {
@@ -51,18 +54,36 @@ function runCommand(command, args, options = {}) {
 }
 
 function getPythonCandidates() {
+  // Explicit interpreter override for machines where none of the probed
+  // candidates resolve (e.g. only a managed Python toolchain is available).
+  const override = (process.env.PCIE_PYTHON || '').trim();
+  if (override) {
+    return [{ command: override, baseArgs: [] }];
+  }
+
   if (process.platform === 'win32') {
     return [
+      { command: 'py', baseArgs: ['-3.13'] },
       { command: 'py', baseArgs: ['-3.12'] },
       { command: 'py', baseArgs: ['-3.11'] },
       { command: 'py', baseArgs: ['-3.10'] },
       { command: 'py', baseArgs: ['-3.9'] },
+      { command: 'python3.13', baseArgs: [] },
+      { command: 'python3.12', baseArgs: [] },
+      { command: 'python3.11', baseArgs: [] },
+      { command: 'python3.10', baseArgs: [] },
+      { command: 'python3.9', baseArgs: [] },
       { command: 'python', baseArgs: [] },
       { command: 'python3', baseArgs: [] },
     ];
   }
 
   return [
+    { command: 'python3.13', baseArgs: [] },
+    { command: 'python3.12', baseArgs: [] },
+    { command: 'python3.11', baseArgs: [] },
+    { command: 'python3.10', baseArgs: [] },
+    { command: 'python3.9', baseArgs: [] },
     { command: 'python3', baseArgs: [] },
     { command: 'python', baseArgs: [] },
   ];
@@ -89,15 +110,19 @@ function isSupportedPythonVersion(version) {
     return false;
   }
 
-  return version.minor >= requiredPythonMinor;
+  return version.minor >= minSupportedPythonMinor && version.minor <= maxSupportedPythonMinor;
 }
 
 function findPythonCommand() {
-  for (const candidate of getPythonCandidates()) {
+  const candidates = getPythonCandidates();
+  const unsupported = [];
+
+  for (const candidate of candidates) {
     try {
       const versionText = runCommand(candidate.command, [...candidate.baseArgs, '--version']);
       const version = parseVersion(versionText);
       if (!isSupportedPythonVersion(version)) {
+        unsupported.push(versionText || candidate.command);
         continue;
       }
 
@@ -110,7 +135,16 @@ function findPythonCommand() {
     }
   }
 
-  throw new Error('Python 3.9 or newer was not found. Install Python, then rerun npm install or npm run setup:ocr.');
+  const supportedRange = `Python ${requiredPythonMajor}.${minSupportedPythonMinor}-${requiredPythonMajor}.${maxSupportedPythonMinor}`;
+  const detail = unsupported.length > 0
+    ? ` Detected but unsupported: ${unsupported.join(', ')}.`
+    : '';
+
+  throw new Error(
+    `No ${supportedRange} interpreter was found for the local OCR runtime.`
+    + `${detail} PaddlePaddle CPU wheels do not yet cover newer Python releases.`
+    + ' Install a supported Python, or set PCIE_PYTHON to its executable and rerun npm run setup:ocr.',
+  );
 }
 
 function getVenvPythonExecutable() {

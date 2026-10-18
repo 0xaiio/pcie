@@ -71,7 +71,7 @@ PCIE 的四个字母对应四项核心能力，同时呼应 PCIe 总线高速、
 - 在图片条目上点击 **Extract Text (OCR)** 图标，系统会把图片中的文本提取为 Markdown 文件并下载到本地。
 - 图片 OCR 通过本地 PaddleOCR runtime 执行，不依赖 `GEMINI_API_KEY`、`OPENAI_API_KEY`、`DEEPSEEK_API_KEY`。
 - `npm install` 会自动执行本地 OCR bootstrap：创建项目内 Python 虚拟环境、安装 PaddlePaddle / PaddleOCR，并预热离线模型。安装完成后，图片 OCR 可以在断网状态下使用。
-- 如果本地 OCR 运行时未就绪，点击图标会弹出安装指引；按提示补齐 Python `3.9+` 并重跑 `npm install` 或 `npm run setup:ocr`，步骤见 [安装手册 · 本地 OCR 运行时引导](./installation.md#3-本地-ocr-运行时引导)。
+- 如果本地 OCR 运行时未就绪，点击图标会弹出安装指引；按提示补齐 Python `3.9–3.13` 并重跑 `npm install` 或 `npm run setup:ocr`，步骤见 [安装手册 · 本地 OCR 运行时引导](./installation.md#3-本地-ocr-运行时引导)。
 - OCR 失败提示会区分运行时未就绪、OCR runner 启动异常或识别过程异常，便于定位问题。
 
 ## 7. 图片批量转 PDF

@@ -18,6 +18,7 @@ package "Server Layer" {
   [local-ocr.ts] as LocalOcr
   [word-conversion.ts] as WordConversion
   [compression.ts] as Compression
+  [auto-open.ts] as AutoOpen
 }
 
 package "Local Runtime" {
@@ -43,6 +44,7 @@ Server --> AiGateway
 Server --> LocalOcr
 Server --> WordConversion
 Server --> Compression
+Server --> AutoOpen
 
 LocalOcr --> OcrRunner
 OcrRunner --> OcrRuntime

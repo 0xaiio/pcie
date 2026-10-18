@@ -28,6 +28,7 @@ package "Repository: pdf-merger" {
       [runtime-config.ts]
       [word-conversion.ts]
       [compression.ts]
+      [auto-open.ts]
     }
 
     [App.tsx]

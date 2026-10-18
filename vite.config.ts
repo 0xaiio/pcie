@@ -75,5 +75,11 @@ export default defineConfig(() => {
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
     },
+    preview: {
+      // `npm run preview:static` opens the app in the default browser once the
+      // preview server is up. The dev server (server.ts, middleware mode) owns
+      // its own auto-open, so `server.open` is intentionally not set here.
+      open: true,
+    },
   };
 });

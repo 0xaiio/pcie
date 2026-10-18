@@ -139,7 +139,7 @@ AI 助手默认支持三类 provider，并按固定顺序尝试：
 
 图片 OCR 通过以下模块组成：
 
-1. [scripts/bootstrap-local-ocr.mjs](../scripts/bootstrap-local-ocr.mjs)：探测 Python `3.9+`、创建 `.local/paddleocr/venv`、安装 `paddlepaddle` CPU 版与 `paddleocr`、预热离线模型。
+1. [scripts/bootstrap-local-ocr.mjs](../scripts/bootstrap-local-ocr.mjs)：探测 Python `3.9–3.13`（可用 `PCIE_PYTHON` 显式指定解释器）、创建 `.local/paddleocr/venv`、安装 `paddlepaddle` CPU 版与 `paddleocr`、预热离线模型。
 2. [src/server/local-ocr.ts](../src/server/local-ocr.ts)：读取 `.local/paddleocr/install-state.json`，把本地 OCR 是否可用的摘要并入 `/api/runtime-config`，并在 OCR 请求到来时将图片负载交给 Python runner。
 3. [scripts/local-ocr/ocr_runner.py](../scripts/local-ocr/ocr_runner.py)：接收图片、调用 PaddleOCR，并将识别结果返回给 Node。
 4. [scripts/local-ocr/warmup.py](../scripts/local-ocr/warmup.py)：初始化 PaddleOCR 并触发一次最小推理，用于安装期模型预热。
@@ -156,8 +156,27 @@ AI 助手默认支持三类 provider，并按固定顺序尝试：
 4. [src/server/compression.ts](../src/server/compression.ts)：负责 PDF 压缩等级映射、任务 ID 生成与 Ghostscript 命令拼装。
 5. [src/server/word-conversion.ts](../src/server/word-conversion.ts)：负责旧版 `.doc` 文本提取、HTML 转义与结构化包装。
 6. [src/server/word-pdf-native.ts](../src/server/word-pdf-native.ts)：负责原生 Word→PDF 转换后端的探测、COM/LibreOffice 调用与输出验证。
+7. [src/server/auto-open.ts](../src/server/auto-open.ts)：负责启动后浏览器自动打开的策略判断与跨平台启动命令拼装（见第 8 节）。
 
 这种模块划分使 `server.ts` 主要承担路由与请求流转职责，而可预测、可复用的纯逻辑则通过独立模块与自动化测试进行验证。
+
+## 8. 启动行为：端口绑定与浏览器自动打开
+
+[server.ts](../server.ts) 的启动流程分两步，均有明确的终端输出与可关闭开关。
+
+### 8.1 端口解析与顺延
+
+- **解析**：`PORT` 环境变量优先，缺省或非法（非整数 / 越界）时回退 `3000` 并打印 `Ignoring invalid PORT="..."; falling back to port 3000.` 警告；`PORT=0` 保留 Node 的随机可用端口语义。
+- **顺延**：绑定失败且错误码为 `EADDRINUSE` 时自动 `+1` 重试，最多尝试 `100` 个端口（范围 `preferred` ~ `preferred+99`），超出后抛出带范围说明的错误终止启动。
+- **输出**：发生顺延时打印 `Port <首选端口> is busy, using http://localhost:<实际端口> instead.`，并始终以 `Server running on http://localhost:<最终端口>` 告知最终采用的端口。
+
+### 8.2 浏览器自动打开
+
+- **默认开启**：绑定成功后调用 [src/server/auto-open.ts](../src/server/auto-open.ts) 打开 `http://localhost:<最终端口>`，终端打印 `Opening <url> in your default browser...`。
+- **关闭方式**：`AUTO_OPEN=false`（或 `0` / `no` / `off`）；检测到 CI 环境（`CI` 环境变量）时默认不打开，显式 `AUTO_OPEN=true` 可覆盖。关闭时打印 `Browser auto-open is disabled. Visit <url> manually.`。
+- **跨平台**：Windows 使用 `cmd /c start "" <url>`（空引号 token 为必需的窗口标题，避免 URL 被误认为标题），macOS 使用 `open`，其他平台使用 `xdg-open`。子进程以 `detached` + `stdio: "ignore"` 方式派生，不阻塞服务进程。
+- **容错**：无可用启动器（如无桌面环境的容器）时不会中断启动，仅打印 `Could not open a browser automatically. Visit <url> manually ...` 提示。
+- **纯静态预览**：`npm run preview:static`（`vite preview`）通过 [vite.config.ts](../vite.config.ts) 的 `preview.open: true` 获得一致行为；开发模式由 `server.ts` 中间件自行负责，不设置 `server.open`，避免重复打开。
 
 ---
 

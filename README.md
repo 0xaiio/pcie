@@ -23,7 +23,9 @@ npm install
 npm run dev
 ```
 
-- 依赖要求：Node.js `v20.19+` 或 `v22.13+`、Python `3.9+`（本地 OCR）；PDF 压缩需要 Ghostscript。
+- 依赖要求：Node.js `v20.19+` 或 `v22.13+`、Python `3.9–3.13`（本地 OCR，受 PaddlePaddle CPU wheel 支持范围约束）；PDF 压缩需要 Ghostscript。
+- **端口自动顺延**：默认监听 `3000`（可用 `PORT` 覆盖）。端口被占用时自动探测下一个可用端口，并在终端明确输出最终采用的地址。
+- **自动打开浏览器**：启动成功后自动在默认浏览器中打开应用页面；设置 `AUTO_OPEN=false` 可关闭（CI 环境下默认不打开）。
 - 详细环境说明见 [安装手册](./docs/installation.md)；首次运行排错见 [快速开始](./docs/quick-start.md) 与 [常见问题](./docs/faq.md)。
 
 ## 文档索引

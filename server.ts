@@ -3,7 +3,7 @@ import compression from "compression";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import multer from "multer";
-import { createServer as createHttpServer } from "http";
+import { createServer as createHttpServer, type Server as HttpServer } from "http";
 import type { AddressInfo } from "net";
 import fs from "fs";
 import path from "path";
@@ -17,6 +17,7 @@ import {
 import { isAiRequestError, runAiChatRequest } from "./src/server/ai.ts";
 import { isLocalOcrRequestError, runLocalImageOcrRequest } from "./src/server/local-ocr.ts";
 import { readRuntimeConfig } from "./src/server/runtime-config.ts";
+import { openAppInBrowserAfterStart } from "./src/server/auto-open.ts";
 import { extractLegacyWordHtml } from "./src/server/word-conversion.ts";
 import {
   buildNativeWordPdfUnavailableMessage,
@@ -36,12 +37,74 @@ if (!fs.existsSync(uploadDir)) {
 }
 const upload = multer({ dest: uploadDir });
 
+const DEFAULT_PORT = 3000;
+const PORT_SEARCH_LIMIT = 100;
+
+function resolvePreferredPort(): number {
+  const raw = (process.env.PORT || "").trim();
+  if (raw === "") {
+    return DEFAULT_PORT;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65535) {
+    console.warn(`Ignoring invalid PORT="${raw}"; falling back to port ${DEFAULT_PORT}.`);
+    return DEFAULT_PORT;
+  }
+
+  return parsed;
+}
+
+/**
+ * Binds the HTTP server to `preferredPort`, transparently moving to the next
+ * port while EADDRINUSE is reported. Returns the port that was actually bound.
+ */
+async function listenOnFirstAvailablePort(
+  httpServer: HttpServer,
+  preferredPort: number,
+): Promise<number> {
+  let activePort = preferredPort;
+
+  for (let attempt = 0; attempt < PORT_SEARCH_LIMIT; attempt += 1) {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const handleListening = () => {
+          httpServer.off("error", handleError);
+          resolve();
+        };
+
+        const handleError = (error: NodeJS.ErrnoException) => {
+          httpServer.off("listening", handleListening);
+          reject(error);
+        };
+
+        httpServer.once("listening", handleListening);
+        httpServer.once("error", handleError);
+        httpServer.listen(activePort, "0.0.0.0");
+      });
+
+      return activePort;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EADDRINUSE") {
+        throw error;
+      }
+
+      activePort += 1;
+    }
+  }
+
+  throw new Error(
+    `No available port found in range ${preferredPort}-${preferredPort + PORT_SEARCH_LIMIT - 1}.`
+    + " Set PORT to a free port and retry.",
+  );
+}
+
 async function startServer() {
   const app = express();
   const httpServer = createHttpServer(app);
   app.use(compression());
   app.use(express.json({ limit: "25mb" }));
-  const preferredPort = Number.parseInt(process.env.PORT || "3000", 10);
+  const preferredPort = resolvePreferredPort();
 
   // API routes FIRST
   app.get("/api/health", (req, res) => {
@@ -381,44 +444,19 @@ async function startServer() {
     });
   }
 
-  let activePort = preferredPort;
-
-  while (true) {
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const handleListening = () => {
-          httpServer.off("error", handleError);
-          resolve();
-        };
-
-        const handleError = (error: NodeJS.ErrnoException) => {
-          httpServer.off("listening", handleListening);
-          reject(error);
-        };
-
-        httpServer.once("listening", handleListening);
-        httpServer.once("error", handleError);
-        httpServer.listen(activePort, "0.0.0.0");
-      });
-
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EADDRINUSE") {
-        throw error;
-      }
-
-      activePort += 1;
-    }
-  }
+  const activePort = await listenOnFirstAvailablePort(httpServer, preferredPort);
 
   const address = httpServer.address() as AddressInfo | null;
   const boundPort = address?.port ?? activePort;
 
-  if (boundPort !== preferredPort) {
+  if (preferredPort !== 0 && boundPort !== preferredPort) {
     console.warn(`Port ${preferredPort} is busy, using http://localhost:${boundPort} instead.`);
   }
 
-  console.log(`Server running on http://localhost:${boundPort}`);
+  const localUrl = `http://localhost:${boundPort}`;
+  console.log(`Server running on ${localUrl}`);
+
+  await openAppInBrowserAfterStart(localUrl);
 }
 
 startServer();

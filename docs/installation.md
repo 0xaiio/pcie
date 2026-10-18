@@ -8,7 +8,7 @@
 |:---|:---|:---|:---|
 | Node.js | `v20.19+` 或 `v22.13+`（见 [package.json](../package.json) 的 `engines` 字段） | 开发服务器、构建与服务端运行时 | 必需 |
 | npm | 随 Node.js 提供 | 依赖安装与脚本执行 | 必需 |
-| Python | `3.9+` | 本地 PaddleOCR 运行时 | 图片 OCR 功能必需 |
+| Python | `3.9–3.13` | 本地 PaddleOCR 运行时 | 图片 OCR 功能必需 |
 | Ghostscript | 较新稳定版（`gs` 命令可调用） | PDF 压缩（`/api/compress/start`） | PDF 压缩功能必需 |
 | Microsoft Word | Windows 桌面版 | Word 转 PDF 的最高保真链路 | 可选 |
 | LibreOffice | 较新稳定版（`soffice` 可调用） | Word 转 PDF 的跨平台链路 | 可选 |
@@ -16,6 +16,7 @@
 说明：
 
 - Node.js 版本由 `npm install` 前的 `preinstall` 脚本（[scripts/check-node-version.mjs](../scripts/check-node-version.mjs)）强制校验，低于要求会直接终止安装。
+- Python 上界 `3.13` 来自 PaddlePaddle CPU wheel 的发布范围（`cp38`–`cp313`）：使用 3.14+ 时 pip 会报告 `paddlepaddle==3.2.0 (from versions: none)`，引导脚本因此内置 `3.9–3.13` 门禁并给出明确报错。可用 `PCIE_PYTHON=<解释器>` 显式指定受支持的 Python。
 - 未安装 Python 或 Ghostscript 时，项目仍可安装与启动，但图片 OCR 或 PDF 压缩功能不可用；界面会给出对应提示。
 - Word 转 PDF 的三条链路与优先级见 [使用手册 · Word 转 PDF](./user-manual.md#2-word-转-pdf含-doc)。
 
@@ -39,7 +40,7 @@ npm install
 
 `npm install` 的 `postinstall` 会自动执行 [scripts/bootstrap-local-ocr.mjs](../scripts/bootstrap-local-ocr.mjs)，流程为：
 
-1. 探测本机可用的 Python `3.9+`；
+1. 探测本机可用的 Python `3.9–3.13`（可用 `PCIE_PYTHON` 显式指定解释器）；
 2. 在项目内创建虚拟环境 `.local/paddleocr/venv`；
 3. 安装 `paddlepaddle` CPU 版与 `paddleocr`；
 4. 预热默认 OCR 模型，缓存写入 `.local/paddleocr/cache`。
@@ -85,7 +86,9 @@ npm run smoke:ocr
 | 现象 | 原因与处理 |
 |:---|:---|
 | `npm install` 提示 Unsupported Node.js | Node 版本低于 `v20.19` / `v22.13`。用 nvm / fnm 切换后重试，必要时执行 `. .\scripts\refresh-node-env.ps1` 或重启终端 |
-| OCR bootstrap 中断，提示缺少 Python | 安装 Python `3.9+` 并确保在 PATH 中，然后重跑 `npm run setup:ocr` |
+| OCR bootstrap 中断，提示缺少 Python | 安装 Python `3.9–3.13` 并确保在 PATH 中，然后重跑 `npm run setup:ocr` |
+| OCR bootstrap 报 `paddlepaddle==3.2.0 (from versions: none)` | 虚拟环境使用了 Python 3.14+，超出 PaddlePaddle CPU wheel 支持范围。改用 `3.9–3.13` 的解释器（或设置 `PCIE_PYTHON=<解释器>`），删除 `.local/paddleocr/venv` 后重跑 `npm run setup:ocr` |
+| OCR bootstrap 提示没有受支持的 Python | 引导脚本在 `3.9–3.13` 范围内探测失败。安装受支持版本，或设置 `PCIE_PYTHON=<解释器>` 后重跑 |
 | OCR bootstrap 因网络中断 | 恢复网络后重跑 `npm run setup:ocr`；引导流程可重复执行，不会破坏已完成的部分 |
 | `npm run smoke:ocr` 失败 | 按输出提示检查 `.local/paddleocr/venv` 与 `.local/paddleocr/cache` 是否存在，缺失时重跑 `npm run setup:ocr` |
 | 端口相关启动问题 | 见 [常见问题](./faq.md#启动与端口) |
