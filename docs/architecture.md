@@ -15,6 +15,7 @@
 
 ### 1.2 核心业务依赖
 - **PDF 编解码**：`pdf-lib` 负责 PDF 页面与数据处理，`pdfjs-dist` 负责 PDF 预览与渲染支持。
+- **PDF 渲染**：`mupdf` 负责服务端按页渲染（SVG 矢量输出 + PNG / JPEG 原生编码 + 光栅化）；`sharp`（libvips）负责 mupdf 不支持的 WebP / TIFF / GIF 编码。BMP 无可用编码器，由本仓库自研 RLE8 编码器实现。
 - **Word 文档解析**：`mammoth` 负责前端 `DOCX -> HTML` 转换，`word-extractor` 负责服务端旧版 `.doc` 文本提取。
 - **图像与 AI**：`@tensorflow/tfjs` 与 `upscaler` 用于本地图像增强；PaddlePaddle / PaddleOCR 用于本地图片 OCR；Gemini、OpenAI、DeepSeek 通过服务端 AI gateway 对接。
 - **打包与压缩**：`jszip` 用于打包导出，`browser-image-compression` 用于本地图片压缩。
@@ -62,6 +63,18 @@
 - `src/server/local-ocr.ts`：本地 PaddleOCR runtime 状态探测与图片 OCR 调度
 - `src/server/word-conversion.ts`：旧版 `.doc` 文本提取、HTML 转义与结构化包装
 - `src/server/word-pdf-native.ts`：原生 Word→PDF 转换后端（Word COM、LibreOffice CLI）的探测与执行
+- `src/server/pdf-images.ts`：多格式内嵌图像提取（遍历每页 `/XObject`，用 `PDFDocument.loadImage` 按 `/Filter` 自动解码 DCTDecode / FlateDecode / CCITTFaxDecode 等编码，统一重编码为 PNG）、caption 顺序配对与安全文件名生成、以及无位图时的矢量图诊断
+- `src/server/pdf-render-shared.ts`：PDF 转图片的**共享契约**——格式注册表（format / extension / mimeType / vector / label）、别名归一化、未知格式回退 SVG、光栅化 DPI 常量。浏览器端与服务端共用，前端只依赖此模块
+- `src/server/pdf-render.ts`：PDF 转图片的**服务端实现**——SVG 走 mupdf `DocumentWriter` 矢量路径，PNG / JPEG 走 mupdf 原生编码，WebP / TIFF / GIF 走 sharp，BMP 走自研 `BI_RLE8` 编码器
+
+> **为什么拆成两个模块**：`pdf-render.ts` 含 `import('sharp')` 等 Node-only 依赖，
+> 浏览器端 import 会让 Vite 打包时尝试解析原生模块。共享契约与实现分离后，
+> 前端只引入纯数据模块，服务端实现对浏览器不可见。
+
+> **格式能力边界（实测，勿凭猜测改动）**：mupdf `DocumentWriter` 仅支持
+> svg / png / pam / pnm / pbm / pgm / ppm / jpeg，**不支持** webp / bmp / tiff / gif；
+> `Pixmap` 也只有 `asPNG` / `asJPEG` / `asPAM` / `asPSD`。sharp 支持 png / jpeg / webp /
+> tiff / gif / avif，但**不支持 BMP**（连 BMP 输入也不支持），因此 BMP 必须自研。
 
 ## 3. 数据模型
 

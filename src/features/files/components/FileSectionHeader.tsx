@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown } from '../../../components/icons';
 
 import type { SortConfig, SortKey } from '../types';
 

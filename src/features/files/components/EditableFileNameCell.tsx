@@ -1,6 +1,6 @@
 import type { KeyboardEvent, MouseEvent, ReactNode } from 'react';
 
-import { Check, Edit2, X } from 'lucide-react';
+import { Check, Edit2, X } from '../../../components/icons';
 
 interface EditableFileNameCellProps {
   fileName: string;

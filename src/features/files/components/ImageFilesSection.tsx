@@ -1,5 +1,5 @@
 import { Draggable, Droppable } from '@hello-pangea/dnd';
-import { Copy, Eye, FileArchive, FileText, GripVertical, Image as ImageIcon, Loader2, RotateCw, ScanText, Sparkles, Trash2, Wand2 } from 'lucide-react';
+import { Copy, Eye, FileArchive, FileText, GripVertical, Image as ImageIcon, Loader2, RotateCw, ScanText, Sparkles, Trash2, Wand2 } from '../../../components/icons';
 
 import { formatBytes, selectFilesByIds } from '../file-utils';
 import type { AppFile, SortConfig, SortKey } from '../types';

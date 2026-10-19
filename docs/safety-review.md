@@ -75,7 +75,7 @@ multer 实例未配置 `limits.fileSize`、`limits.files`、`fileFilter` 等参�
 - 上传超大文件耗尽磁盘空间
 - 上传非预期类型文件触发服务端异常
 
-受影响端点：`/api/word/extract-html`、`/api/word/convert-pdf`、`/api/compress/start`、`/api/pdf2img`。
+受影响端点：`/api/word/extract-html`、`/api/word/convert-pdf`、`/api/compress/start`、`/api/pdf/extract-images`、`/api/pdf2img`。
 
 **建议**: 为 multer 添加合理的文件大小上限，例如 `limits: { fileSize: 100 * 1024 * 1024 }`（100 MB），并添加 `fileFilter` 按 MIME 类型过滤。
 
@@ -144,7 +144,7 @@ await execAsync(command, { maxBuffer: 10 * 1024 * 1024 });
 
 **文件**: `server.ts:47-364`
 
-`/api/ai/chat`、`/api/ocr/image`、`/api/compress/*`、`/api/word/*`、`/api/pdf2img` 等端点均无需认证。系统设计为本地单用户工具，此为架构上的有意取舍。但结合 [H1]（绑定 `0.0.0.0`）时，此问题严重性升高。
+`/api/ai/chat`、`/api/ocr/image`、`/api/compress/*`、`/api/word/*`、`/api/pdf/extract-images`、`/api/pdf2img` 等端点均无需认证。系统设计为本地单用户工具，此为架构上的有意取舍。但结合 [H1]（绑定 `0.0.0.0`）时，此问题严重性升高。
 
 **建议**: 绑定到 `127.0.0.1` 可缓解此问题。若需远程访问，添加 token 认证。
 
@@ -207,6 +207,29 @@ const LOCAL_OCR_STARTUP_TIMEOUT_MS = 300_000;  // 5 分钟
 单个 OCR 请求可占用 worker 进程长达 5 分钟，且并发请求需排队，可能被利用进行资源占用。
 
 **建议**: 将超时降低到 120 秒，并限制并发 OCR 请求数量。
+
+---
+
+### L6 — PDF 转图片的内存放大风险（多格式后新增）
+
+**文件**: `src/server/pdf-render.ts`、`server.ts`（`POST /api/pdf2img`）
+
+多格式支持引入了两处内存放大面：
+
+1. **光栅化缓冲**。300 DPI 下 A4 一页约 2550×3300 px，RGB 缓冲约 25 MB。逐页渲染时
+   单页峰值可控，但页数极多的文档会累积 base64 字符串体积——V8 的单字符串上限约 512 MB，
+   超出会抛 `ERR_STRING_TOO_LONG`。
+2. **sharp 原生模块**。WebP / TIFF / GIF 走 libvips，其默认线程池会按 CPU 核数扩张；
+   并发请求叠加多个文档转换时，内存占用不可控。
+
+现有缓解：响应改为**逐页流式写出**而非一次性构造完整 JSON；BMP 采用 RLE8 压缩
+（未压缩索引数据每页约 8.4 MB，39 页即超出上限）。
+
+**建议**: 为 `/api/pdf2img` 增加页数上限或按 DPI 分档；显式设置 `sharp.concurrency()`
+与 `sharp.cache(false)`；结合 [M1] 的 multer 限额与 [L2] 的速率限制一起收敛。
+
+**关于原生依赖的供应链风险**：`sharp` 自带平台相关的 libvips 二进制，属于
+[M3 依赖供应链风险](#m3--依赖供应链风险) 的新增条目。建议锁定 lockfile 并在 CI 中校验安装脚本。
 
 ---
 

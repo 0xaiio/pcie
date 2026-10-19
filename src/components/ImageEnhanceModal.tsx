@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Check, Loader2 } from 'lucide-react';
+import { X, Check, Loader2 } from './icons';
 import Upscaler from 'upscaler';
 import type { AppFile } from '../features/files';
 

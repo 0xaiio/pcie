@@ -100,11 +100,12 @@ describe('PdfFilesSection', () => {
     await user.click(row.getByTitle('AI Assistant'));
     expect(props.onAskAi).toHaveBeenLastCalledWith([props.files[0]]);
 
-    await user.click(row.getByTitle('Extract Images'));
+    await user.click(row.getByTitle('Extract Embedded Images (all formats, named by caption)'));
     expect(props.onExtractImages).toHaveBeenCalledWith(props.files[0]);
 
     await user.click(row.getByTitle('Convert Pages to Vector (SVG)'));
-    expect(props.onConvertToVector).toHaveBeenCalledWith(props.files[0]);
+    // 回调的第二个参数是所选输出格式；主按钮对应默认的 SVG
+    expect(props.onConvertToVector).toHaveBeenCalledWith(props.files[0], 'svg');
 
     await user.click(row.getByTitle('Preview & Edit Pages'));
     expect(props.onEditPages).toHaveBeenCalledWith(props.files[0]);
@@ -151,5 +152,91 @@ describe('PdfFilesSection', () => {
     await user.type(input, '{Enter}');
 
     expect(props.onSaveRename).toHaveBeenCalledWith('pdf-1');
+  });
+});
+
+describe('PdfFilesSection — PDF 转图片的格式选择', () => {
+  /** 定位某一行的下拉三角按钮。 */
+  function dropdownFor(fileName: string) {
+    const row = screen.getByText(fileName).closest('li');
+    expect(row).not.toBeNull();
+    return within(row as HTMLLIElement).getByRole('button', { name: 'Choose output image format' });
+  }
+
+  it('每一行都有独立的下拉三角，且默认收起', () => {
+    const props = createProps();
+    render(<PdfFilesSection {...props} />);
+
+    expect(screen.getAllByRole('button', { name: 'Choose output image format' })).toHaveLength(2);
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  it('从某一行展开菜单并选格式时，只回调该行文件', async () => {
+    const user = userEvent.setup();
+    const props = createProps();
+    render(<PdfFilesSection {...props} />);
+
+    // 在第二行展开并选 PNG
+    await user.click(dropdownFor('invoice.pdf'));
+    const pngItem = within(screen.getByRole('menu'))
+      .getAllByRole('menuitem')
+      .find((el) => el.textContent?.trim().startsWith('PNG'));
+    expect(pngItem).toBeDefined();
+    await user.click(pngItem!);
+
+    expect(props.onConvertToVector).toHaveBeenCalledTimes(1);
+    expect(props.onConvertToVector).toHaveBeenCalledWith(props.files[1], 'png');
+  });
+
+  it('依次选择不同格式会依次回调对应格式', async () => {
+    const user = userEvent.setup();
+    const props = createProps();
+    // createProps 的兜底是普通函数，这里显式换成 mock 以便读回调用参数
+    const onConvertToVector = vi.fn();
+    render(<PdfFilesSection {...props} onConvertToVector={onConvertToVector} />);
+
+    for (const label of ['WebP', 'TIFF', 'GIF']) {
+      await user.click(dropdownFor('contract.pdf'));
+      const item = within(screen.getByRole('menu'))
+        .getAllByRole('menuitem')
+        .find((el) => el.textContent?.includes(label));
+      expect(item, `菜单里找不到 ${label}`).toBeDefined();
+      await user.click(item!);
+    }
+
+    expect(onConvertToVector.mock.calls.map((call) => call[1])).toEqual(['webp', 'tiff', 'gif']);
+  });
+
+  it('从菜单选 SVG 与点主按钮效果一致', async () => {
+    const user = userEvent.setup();
+    const props = createProps();
+    render(<PdfFilesSection {...props} />);
+
+    await user.click(
+      within(screen.getByText('contract.pdf').closest('li') as HTMLLIElement)
+        .getByTitle('Convert Pages to Vector (SVG)'),
+    );
+    await user.click(dropdownFor('contract.pdf'));
+    const svgItem = within(screen.getByRole('menu'))
+      .getAllByRole('menuitem')
+      .find((el) => el.textContent?.includes('SVG'));
+    await user.click(svgItem!);
+
+    expect(props.onConvertToVector).toHaveBeenCalledTimes(2);
+    expect(props.onConvertToVector).toHaveBeenNthCalledWith(1, props.files[0], 'svg');
+    expect(props.onConvertToVector).toHaveBeenNthCalledWith(2, props.files[0], 'svg');
+  });
+
+  it('转换中该行按钮禁用，其他行不受影响', () => {
+    const props = createProps({ convertingToImgId: 'pdf-1' });
+    render(<PdfFilesSection {...props} />);
+
+    const firstRow = screen.getByText('contract.pdf').closest('li') as HTMLLIElement;
+    const secondRow = screen.getByText('invoice.pdf').closest('li') as HTMLLIElement;
+
+    expect(within(firstRow).getByRole('button', { name: 'Convert pages to SVG' })).toBeDisabled();
+    expect(within(firstRow).getByRole('button', { name: 'Choose output image format' })).toBeDisabled();
+    expect(within(secondRow).getByRole('button', { name: 'Convert pages to SVG' })).toBeEnabled();
+    expect(within(secondRow).getByRole('button', { name: 'Choose output image format' })).toBeEnabled();
   });
 });

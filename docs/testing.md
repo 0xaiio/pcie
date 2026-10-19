@@ -25,11 +25,92 @@ npm run test:app
 ```
 
 - `npm run test:logic`：运行 `src/features/files/file-utils.test.ts`
-- `npm run test:app`：运行 Vitest 应用层测试，覆盖文件列表交互、排序与行内移动、图片 / Word 转 PDF 进度、`PdfEditor` 页操作、前端运行时配置加载、服务端 AI provider 顺序回退、本地 OCR 调度、PDF 压缩辅助逻辑、旧版 `.doc` 提取辅助逻辑与浏览器自动打开策略（`src/server/auto-open.app.test.ts`）
+- `npm run test:app`：运行 Vitest 应用层测试，覆盖文件列表交互、排序与行内移动、图片 / Word 转 PDF 进度、`PdfEditor` 页操作、前端运行时配置加载、服务端 AI provider 顺序回退、本地 OCR 调度、PDF 压缩辅助逻辑、旧版 `.doc` 提取辅助逻辑、**PDF 多格式渲染（转图片）与格式选择下拉控件**（`src/server/pdf-render*.app.test.ts`、`src/features/files/components/ConvertToImageMenu.ui.test.tsx`）、**PDF 多格式图片提取与 caption 命名**（`src/server/pdf-images.app.test.ts`）与浏览器自动打开策略（`src/server/auto-open.app.test.ts`）
 
 兼容性说明：`npm run test:ui` 保留为 `npm run test:app` 的别名。
 
-### 1.2 实验脚本的边界
+测试规模：**15 个测试文件、144 个用例**，`tsc --noEmit` 与 `npm test` 全绿。
+
+### 1.2 PDF 转图片（多格式渲染）
+
+`src/server/pdf-render-shared.app.test.ts`（纯契约，无 I/O）与 `src/server/pdf-render.app.test.ts`（真实 PDF）覆盖：
+
+| 覆盖点 | 说明 |
+|:---|:---|
+| 格式注册表 | 至少含 PNG / JPG / JPEG / SVG，并含 WebP / BMP / TIFF / GIF；每个格式都有扩展名、MIME 与展示名，扩展名不重复 |
+| 默认 SVG 行为 | 未指定格式时回退 `svg`，返回**文本**而非二进制；内容含真实矢量图元 |
+| 矢量与 DPI 解耦 | 断言 SVG 产出与 dpi 参数完全无关（矢量路径不经过光栅化矩阵） |
+| 单页转换 | 用 `test/resources/pdf/single-page-sample.pdf`（由真实论文派生）跑通 PNG 与 SVG |
+| 多页逐页输出 | 真实 39 页论文的前 3 页逐页渲染，断言各页字节均可识别且互不相同（证明不是只转首页） |
+| 格式合法性 | 每种格式都用 magic bytes 独立校验（PNG `89 50 4E 47`、JPEG `FF D8 … FF D9`、WebP `RIFF…WEBP`、BMP `BM`、TIFF `II*` / `MM\`、GIF `GIF`、SVG `<svg`），不依赖任何解码库 |
+| 格式别名 | `tif`→`tiff`、`jpe`/`jfif`→`jpeg`、`dib`→`bmp`、`.png`→`png`；大小写与空格不敏感 |
+| 非法格式回退 | 未知格式回退 SVG 而非抛错，且不污染注册表 |
+| DPI 换算 | 72 DPI → 612×792，150 / 300 DPI 尺寸按比例放大 |
+| 像素缓冲 | 输出为紧密排列的 RGB（3 通道），内容非全黑 |
+
+#### BMP RLE8 编码器的三层交叉验证
+
+BMP 无第三方库可用（sharp 也不支持 BMP 输出），因此编码器由本仓库自研，测试用三种独立方式验证：
+
+1. **纯规范参考解码器**（写在测试文件里，只依赖 BMP 格式定义，不 import 任何解码库）——逐索引比对真实 PDF 页面的调色板索引，要求 **0 失配**。
+2. **magic bytes 与结构断言** —— BITMAPINFOHEADER、压缩方式、像素数据 4 字节对齐、每行写满、行数与 EOB 完整。
+3. **能力边界断言** —— 检查 `sharp.format.bmp.output` 为假，若将来 sharp 支持 BMP 输出则测试会失败并提示可移除自研编码器。
+
+测试还显式钉死了两个真实踩过的坑：
+
+- **绝不产生 DELTA**：`00 02` 在 RLE8 里是 DELTA 转义码，不是「2 像素绝对段」。测试扫描整个 RLE 流断言 DELTA 段数为 0——一旦回归写 `00 02`，解码器会整体错位。
+- **通道数不靠启发式**：`612×792×3 = 1455552` 恰好能被 4 整除，纯白页面上「每隔 4 字节取一个」恒为 255，两种启发式都会把 RGB 误判成 RGBA。测试用纯白缓冲区断言通道数由调用方显式指定。
+
+另外覆盖四种极端图案（全白 / 全黑 / 逐像素全异 / 黑白交替）的往返一致性，以及 RLE8 压缩率优于未压缩索引数据。
+
+### 1.3 格式选择下拉控件
+
+`src/features/files/components/ConvertToImageMenu.ui.test.tsx`（22 个用例）与 `PdfFilesSection.ui.test.tsx` 的集成用例覆盖：
+
+| 覆盖点 | 说明 |
+|:---|:---|
+| 双按钮结构 | 主按钮（默认 SVG）与右下角下拉三角在同一按钮组内；三角带 `aria-haspopup="menu"` |
+| 默认收起 | 初始不渲染菜单 |
+| 主按钮行为 | 点击回调 `'svg'`，与旧版行为一致 |
+| 菜单内容 | 列出全部注册格式；SVG 项标注 `default` 且仅此一项有该标注 |
+| 逐格式选择 | 参数化地对每个格式断言回调值，并验证选择后菜单收起 |
+| 非默认不误触 | 选 PNG 时断言从未回调 `'svg'` |
+| 关闭交互 | 点击外部、按 `Esc` 均关闭；关闭不触发回调 |
+| 事件隔离 | 主按钮与菜单项点击都不冒泡到行容器（避免误触发行选择） |
+| 禁用态 | 转换中该行两按钮禁用，其他行不受影响 |
+| 行级隔离 | 在第二行展开选格式只回调第二行文件 |
+
+### 1.4 PDF 图片提取
+
+`src/server/pdf-images.app.test.ts` 覆盖以下场景，基于合成夹具与真实 PDF 运行：
+
+| 覆盖点 | 说明 |
+|:---|:---|
+| 多格式提取 | 夹具同时包含 DCTDecode(JPEG)、FlateDecode、CCITTFaxDecode 三类 XObject，断言全部提取成功且 `decodeFailures` 为 0 |
+| 输出合法性 | 每张提取结果都是可显示的 PNG、MIME 为 `image/png`、宽高为正 |
+| caption 命名 | 文件名形如 `page-3-The-coordinator.png`（图注前缀已剥离），未匹配时回退 `page-N-image-M.png` |
+| 命名安全 | 覆盖文件系统非法字符剔除、中日韩保留、Windows 保留设备名、长度上限、句末方括号引用剥离 |
+| 唯一性 | 断言整份文档内文件名不重复 |
+| 题注定位 | 支持 `Figure` / `Fig.` / `Table` 与 `图` / `表` 等中英文写法；无题注时返回 null |
+| 矢量归因 | 对真实 39 页 LaTeX 论文断言「图为矢量、无位图」，且提示里**必须**含可执行的下一步（`PDF 转图片`），且**不得**出现 `only JPEG` / `只支持 JPEG` 之类的误导性措辞 |
+| 空文档 | 分别覆盖 0 页与无内容的提示差异 |
+
+夹具由脚本生成，不手工维护：
+
+```bash
+node scripts/fixtures/build-image-extraction-fixture.mjs
+```
+
+单页样本同样由脚本从真实论文派生（`mupdf` 的 `graftPage` 移植第 1 页，保留真实矢量内容而非人造空白页）：
+
+```bash
+node --experimental-strip-types scripts/make-single-page-sample.mjs
+```
+
+> `scripts/fixtures/` 与 `scripts/make-single-page-sample.mjs` 属于测试资源构建工具，不属于 `scripts/experiments/`（后者刻意不纳入 `npm test`）。
+> 生成脚本幂等：样本已是目标页数时直接跳过。
+
+### 1.5 实验脚本的边界
 
 `scripts/experiments/` 按用途拆分为：
 
@@ -84,6 +165,9 @@ npm run smoke:ocr
 | 用例编号 | 用例名称 | 操作动作 | 预期结果 | 状态 |
 |----------|----------|----------|----------|------|
 | TC-14 | PDF 单页删除 | 打开 PDF 编辑器并删除指定页面 | 缩略图与页码即时更新，导出的 PDF 仅保留剩余页面 | [ ] |
+| TC-14A | 多格式图片提取 | 对含位图的 PDF 点击 **Extract Embedded Images** | 图片按页加入 Images 区块，全部为可打开的 PNG | [ ] |
+| TC-14B | caption 命名 | 观察提取出的图片文件名 | 文件名取自图中标题（如 `...-p2.png`），而非 `img-1.jpg` 这类序号名 | [ ] |
+| TC-14C | 纯矢量论文提示 | 对插图由矢量绘制而成的 LaTeX 论文执行提取 | 提示"文档不含位图、图形为矢量绘制"，并指引改用 **Convert Pages to Vector (SVG)**；不再出现 `No extractable JPEG images found` | [ ] |
 
 ### 模块五：导出与打包
 | 用例编号 | 用例名称 | 操作动作 | 预期结果 | 状态 |
@@ -107,3 +191,4 @@ npm run smoke:ocr
 - 测试分层对应的实现细节见 [系统实现说明](./implementation.md)
 - 接口行为契约见 [接口说明](./api.md)
 - 提交前验证流程见 [贡献守则](./contributing.md)
+- 图片提取修复的根因分析见 [变更记录](./changelog.md)

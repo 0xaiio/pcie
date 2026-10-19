@@ -1,4 +1,4 @@
-import { Lock, Sparkles } from 'lucide-react';
+import { Lock, Sparkles } from './icons';
 
 function DocumentGlyph({ label, toneClass }: { label: string; toneClass: string }) {
   return (

@@ -1,8 +1,10 @@
 import { Draggable, Droppable } from '@hello-pangea/dnd';
-import { Copy, Eye, FileArchive, FileImage, FileText, FileUp, GripVertical, ImagePlus, LayoutGrid, Loader2, Sparkles, Trash2 } from 'lucide-react';
+import { Copy, Eye, FileArchive, FileText, FileUp, GripVertical, ImagePlus, LayoutGrid, Loader2, Sparkles, Trash2 } from '../../../components/icons';
 
+import type { PdfRenderFormat } from '../../../server/pdf-render-shared';
 import { formatBytes, selectFilesByIds } from '../file-utils';
 import type { AppFile, SortConfig, SortKey } from '../types';
+import { ConvertToImageMenu } from './ConvertToImageMenu';
 import { EditableFileNameCell } from './EditableFileNameCell';
 import { FileSectionHeader } from './FileSectionHeader';
 import { MoveFileButtons } from './MoveFileButtons';
@@ -28,7 +30,7 @@ interface PdfFilesSectionProps {
   onAskAi: (files: AppFile[]) => void;
   onExtractImages: (file: AppFile) => void;
   extractingImagesId: string | null;
-  onConvertToVector: (file: AppFile) => void;
+  onConvertToVector: (file: AppFile, format?: PdfRenderFormat) => void;
   convertingToImgId: string | null;
   onEditPages: (file: AppFile) => void;
   onRemove: (id: string) => void;
@@ -186,22 +188,16 @@ export function PdfFilesSection({
                       }}
                       disabled={extractingImagesId === file.id}
                       className="p-2 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50"
-                      title="Extract Images"
+                      title="Extract Embedded Images (all formats, named by caption)"
                     >
                       {extractingImagesId === file.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <ImagePlus className="w-5 h-5" />}
                     </button>
 
-                    <button
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onConvertToVector(file);
-                      }}
-                      disabled={convertingToImgId === file.id}
-                      className="p-2 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50"
-                      title="Convert Pages to Vector (SVG)"
-                    >
-                      {convertingToImgId === file.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileImage className="w-5 h-5" />}
-                    </button>
+                    <ConvertToImageMenu
+                      fileId={file.id}
+                      busyFileId={convertingToImgId}
+                      onConvert={(format) => onConvertToVector(file, format)}
+                    />
 
                     <button
                       onClick={(event) => {

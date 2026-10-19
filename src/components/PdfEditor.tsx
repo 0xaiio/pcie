@@ -3,7 +3,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 // @ts-ignore
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import { PDFDocument } from 'pdf-lib';
-import { X, Trash2, FileOutput, CheckSquare, Square, Loader2 } from 'lucide-react';
+import { X, Trash2, FileOutput, CheckSquare, Square, Loader2 } from './icons';
 import type { AppFile } from '../features/files';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;

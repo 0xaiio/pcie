@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Send, Sparkles, Loader2, Bot, User } from 'lucide-react';
+import { X, Send, Sparkles, Loader2, Bot, User } from './icons';
 import Markdown from 'react-markdown';
 import * as mammoth from 'mammoth';
 import type { AppFile } from '../features/files';

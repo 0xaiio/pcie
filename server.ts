@@ -19,6 +19,12 @@ import { isLocalOcrRequestError, runLocalImageOcrRequest } from "./src/server/lo
 import { readRuntimeConfig } from "./src/server/runtime-config.ts";
 import { openAppInBrowserAfterStart } from "./src/server/auto-open.ts";
 import { extractLegacyWordHtml } from "./src/server/word-conversion.ts";
+import { getPdfRenderProfile, renderPage } from "./src/server/pdf-render.ts";
+import {
+  buildNoImagesMessage,
+  countPagesWithVectorInk,
+  extractPdfImages,
+} from "./src/server/pdf-images.ts";
 import {
   buildNativeWordPdfUnavailableMessage,
   convertWordDocumentToPdf,
@@ -316,12 +322,71 @@ async function startServer() {
     });
   });
 
+  app.post("/api/pdf/extract-images", upload.single("pdf"), async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "No PDF file uploaded" });
+
+    const inputPath = req.file.path;
+    const sourceName = typeof req.file.originalname === "string"
+      ? req.file.originalname
+      : "document.pdf";
+
+    try {
+      const pdfBytes = new Uint8Array(fs.readFileSync(inputPath));
+      const result = await extractPdfImages(pdfBytes, sourceName, { yieldEveryMs: 10 });
+
+      if (result.images.length === 0) {
+        // 区分「文档无位图」与「图是矢量」，给用户可执行的结论而非误导性报错
+        const { pageCount, pagesWithInk } = await countPagesWithVectorInk(pdfBytes);
+        const message = await buildNoImagesMessage({
+          pageCount,
+          pagesWithContent: pagesWithInk,
+        });
+        res.setHeader("Cache-Control", "no-store");
+        return res.status(200).json({
+          images: [],
+          scannedPages: result.scannedPages,
+          decodeFailures: result.decodeFailures,
+          vectorPages: pagesWithInk,
+          message,
+        });
+      }
+
+      res.setHeader("Cache-Control", "no-store");
+      res.json({
+        images: result.images.map((image) => ({
+          page: image.page,
+          fileName: image.fileName,
+          caption: image.caption,
+          captionMatched: image.captionMatched,
+          width: image.width,
+          height: image.height,
+          format: image.format,
+          mimeType: image.mimeType,
+          bytes: Buffer.from(image.bytes).toString("base64"),
+        })),
+        scannedPages: result.scannedPages,
+        decodeFailures: result.decodeFailures,
+      });
+    } catch (error) {
+      console.error("Image extraction error:", error);
+      res.status(500).json({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      try {
+        if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+      } catch {
+        // Best-effort cleanup only.
+      }
+    }
+  });
+
   app.post("/api/pdf2img", upload.single("pdf"), async (req, res) => {
     if (!req.file) return res.status(400).send("No PDF file uploaded");
 
-    const format = req.body.format || "svg"; // "svg" or "png"
+    const profile = getPdfRenderProfile(req.body.format);
     const inputPath = req.file.path;
-    
+
     try {
       const mupdf = await import("mupdf");
       let pdfBytes;
@@ -330,7 +395,7 @@ async function startServer() {
       } catch (e) {
         throw new Error("Failed to read uploaded file: " + String(e));
       }
-      
+
       let doc;
       try {
         doc = mupdf.Document.openDocument(pdfBytes, "application/pdf");
@@ -342,67 +407,44 @@ async function startServer() {
       if (count === 0) {
         throw new Error("The PDF document contains 0 pages according to mupdf.");
       }
-      
+
       res.setHeader("Content-Type", "application/json");
-      res.write('{"format":"' + format + '","pages":[');
-      
+      // 逐页流式写出，避免大文档把整份结果堆在内存里
+      res.write(
+        JSON.stringify({
+          format: profile.format,
+          extension: profile.extension,
+          mimeType: profile.mimeType,
+          vector: profile.vector,
+          pageCount: count,
+        }).slice(0, -1) + ',"pages":['
+      );
+
       let lastError;
       let streamedCount = 0;
-      
+
       try {
         for (let i = 0; i < count; i++) {
           // Yield the event loop so the server doesn't freeze and fail health checks
           await new Promise(resolve => setTimeout(resolve, 10));
-          
+
           let page;
           try {
             page = doc.loadPage(i);
-            
-            let pageDataString = "";
-            if (format === "svg") {
-              const outData = new mupdf.Buffer();
-              const drw = new mupdf.DocumentWriter(outData, "svg", "");
-              let dev;
-              
-              try {
-                let bounds;
-                try {
-                  bounds = page.getBounds();
-                  if (!Array.isArray(bounds) || bounds.length !== 4) {
-                     bounds = [0, 0, 595, 842];
-                  }
-                } catch(e) {
-                  bounds = [0, 0, 595, 842];
-                }
+            const rendered = await renderPage(mupdf, page, profile);
 
-                dev = drw.beginPage(bounds);
-                page.run(dev, mupdf.Matrix.identity);
-                dev.close();
-                drw.endPage();
-                drw.close();
-                pageDataString = Buffer.from(outData.asUint8Array()).toString("utf8");
-              } finally {
-                if (dev) dev.destroy();
-                if (drw) drw.destroy();
-                if (outData) outData.destroy();
-              }
-            } else {
-              const scale = 300 / 72;
-              const matrix = mupdf.Matrix.scale(scale, scale);
-              const pixmap = page.toPixmap(matrix, mupdf.ColorSpace.DeviceRGB, true, false);
-              try {
-                const pngBytes = pixmap.asPNG();
-                pageDataString = Buffer.from(pngBytes).toString("base64");
-              } finally {
-                if (pixmap) pixmap.destroy();
-              }
-            }
-            
-            if (pageDataString) {
-              if (streamedCount > 0) res.write(',');
-              res.write(JSON.stringify(pageDataString));
-              streamedCount++;
-            }
+            // 矢量格式按文本下发，其余按 base64 二进制下发
+            const payload = typeof rendered === "string"
+              ? rendered
+              : Buffer.from(rendered).toString("base64");
+
+            if (streamedCount > 0) res.write(",");
+            res.write(JSON.stringify({
+              page: i + 1,
+              data: payload,
+              encoding: typeof rendered === "string" ? "text" : "base64",
+            }));
+            streamedCount++;
           } catch (pageErr) {
             lastError = pageErr;
             console.error(`Error processing page ${i}:`, pageErr);
@@ -413,8 +455,12 @@ async function startServer() {
       } finally {
         if (doc) doc.destroy();
       }
-      
-      res.write(']}');
+
+      if (streamedCount === 0 && lastError) {
+        throw lastError;
+      }
+
+      res.write("]}");
       res.end();
     } catch (error) {
       console.error("Conversion error:", error);
@@ -426,7 +472,7 @@ async function startServer() {
     }
   });
 
-  // Vite middleware for development
+// Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: {

@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useState, useRef, useCallback } from 'react';
 import { DragDropContext, DropResult } from '@hello-pangea/dnd';
-import { Download, Loader2, Upload } from 'lucide-react';
+import { Download, Loader2, Upload } from './components/icons';
 import HomeHero, { HomeCapabilityStrip } from './components/HomeHero';
 import {
   AppFile,
@@ -24,6 +24,11 @@ import {
   toggleSelection,
 } from './features/files';
 import { ImageFilesSection, PdfFilesSection, WordFilesSection } from './features/files/components';
+import {
+  DEFAULT_PDF_RENDER_FORMAT,
+  getPdfRenderProfile,
+  type PdfRenderFormat,
+} from './server/pdf-render-shared';
 
 const PdfEditor = lazy(() => import('./components/PdfEditor'));
 const AiAssistant = lazy(() => import('./components/AiAssistant'));
@@ -36,6 +41,14 @@ const loadImageCompression = async () => (await import('browser-image-compressio
 const loadMammoth = () => import('mammoth');
 const loadHtml2Pdf = async () => (await import('html2pdf.js')).default;
 const loadAiHelpers = () => import('./lib/ai');
+
+/** 把 base64 字符串解成字节，避免大字符串经过 TextEncoder 二次拷贝。 */
+function base64ToUint8Array(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
 
 type NativeWordPdfBackend = 'libreoffice-cli' | 'word-com';
 type WordConversionMethod = NativeWordPdfBackend | 'html-fallback';
@@ -967,13 +980,14 @@ export default function App() {
   const [convertingToImgId, setConvertingToImgId] = useState<string | null>(null);
   const [conversionError, setConversionError] = useState<string | null>(null);
 
-  const handleConvertToVector = async (appFile: AppFile) => {
+  const handleConvertToVector = async (appFile: AppFile, format: PdfRenderFormat = DEFAULT_PDF_RENDER_FORMAT) => {
     setConvertingToImgId(appFile.id);
     setConversionError(null);
     try {
+      const profile = getPdfRenderProfile(format);
       const formData = new FormData();
       formData.append("pdf", appFile.file);
-      formData.append("format", "svg");
+      formData.append("format", profile.format);
 
       const response = await fetch("/api/pdf2img", {
         method: "POST",
@@ -992,19 +1006,27 @@ export default function App() {
       }
 
       const data = await response.json();
-      
+
       if (!data || !data.pages || data.pages.length === 0) {
         throw new Error("No pages returned from server.");
       }
 
       const newImgs: AppFile[] = [];
-      
-      data.pages.forEach((pageData: string, index: number) => {
-        const mimeType = 'image/svg+xml';
-        const blob = new Blob([pageData], { type: mimeType });
-        const padIndex = String(index + 1).padStart(3, '0');
-        const fileObj = new File([blob], `${appFile.name.replace(/\.pdf$/i, '')}_page_${padIndex}.svg`, { type: mimeType });
-        
+      const baseName = appFile.name.replace(/\.pdf$/i, "");
+
+      // 服务端按所选格式下发：矢量走文本，其余走 base64 二进制。
+      // 扩展名与 MIME 一律以服务端返回的 profile 为准，避免前后端不一致。
+      data.pages.forEach((pageData: { page: number; data: string; encoding: "text" | "base64" }, index: number) => {
+        const mimeType = data.mimeType || profile.mimeType;
+        const extension = data.extension || profile.extension;
+
+        const payload = pageData.encoding === "base64"
+          ? base64ToUint8Array(pageData.data)
+          : pageData.data;
+        const blob = new Blob([payload], { type: mimeType });
+        const padIndex = String(pageData.page || index + 1).padStart(3, '0');
+        const fileObj = new File([blob], `${baseName}_page_${padIndex}.${extension}`, { type: mimeType });
+
         newImgs.push({
           id: Math.random().toString(36).substring(7),
           file: fileObj,
@@ -1014,11 +1036,11 @@ export default function App() {
           previewUrl: URL.createObjectURL(blob)
         });
       });
-      
+
       setImageFiles(prev => [...prev, ...newImgs]);
       setSelectedImageIds(prev => new Set([...prev, ...newImgs.map(f => f.id)]));
     } catch (e) {
-      setConversionError("Error converting PDF to vector: " + String(e));
+      setConversionError("Error converting PDF to " + format.toUpperCase() + ": " + String(e));
       console.error(e);
       // alert is blocked in iframe, clear error after 10 seconds
       setTimeout(() => setConversionError(null), 10000);
@@ -1029,41 +1051,47 @@ export default function App() {
 
   const handleExtractImages = async (appFile: AppFile) => {
     setExtractingImagesId(appFile.id);
+    setConversionError(null);
     try {
-      const { PDFDocument, PDFRawStream, PDFName } = await loadPdfLib();
-      const arrayBuffer = await appFile.file.arrayBuffer();
-      const pdfDoc = await PDFDocument.load(arrayBuffer);
-      const extractedFiles: File[] = [];
-      
-      const enumerated = pdfDoc.context.enumerateIndirectObjects();
-      let imageCount = 0;
-      for (const [ref, pdfObject] of enumerated) {
-        if (pdfObject instanceof PDFRawStream) {
-          const subtype = pdfObject.dict.lookup(PDFName.of('Subtype'));
-          if (subtype === PDFName.of('Image')) {
-            const filter = pdfObject.dict.lookup(PDFName.of('Filter'));
-            
-            // We only handle DCTDecode (JPEG) for now as it's the most common and easiest to extract directly
-            if (filter === PDFName.of('DCTDecode')) {
-              imageCount++;
-              const bytes = pdfObject.contents;
-              const blob = new Blob([bytes], { type: 'image/jpeg' });
-              const extractedFile = new File([blob], `${appFile.name.replace('.pdf', '')}-img-${imageCount}.jpg`, { type: 'image/jpeg' });
-              extractedFiles.push(extractedFile);
-            }
-          }
-        }
+      // 走服务端提取：浏览器端的 pdf-lib 只能拿到原始流字节，
+      // 无法解码 FlateDecode / CCITTFax 等非 JPEG 编码，也就无法按图注命名。
+      const formData = new FormData();
+      formData.append("pdf", appFile.file);
+
+      const response = await fetch("/api/pdf/extract-images", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server returned ${response.status}: ${errorText.substring(0, 100)}`);
       }
 
-      if (extractedFiles.length > 0) {
-        processFiles(extractedFiles);
-        alert(`Successfully extracted ${extractedFiles.length} image(s) and added them to your Images list.`);
-      } else {
-        alert('No extractable JPEG images found in this PDF.');
+      const data = await response.json();
+      const images = Array.isArray(data?.images) ? data.images : [];
+
+      if (images.length === 0) {
+        // 服务端会区分「文档没图」与「图是矢量」，给出可执行的下一步建议
+        setConversionError(data?.message || '这个 PDF 里没有可提取的图片。');
+        setTimeout(() => setConversionError(null), 10000);
+        return;
       }
+
+      const extractedFiles: File[] = images.map((image: {
+        fileName: string;
+        mimeType: string;
+        bytes: string;
+      }) => {
+        const blob = new Blob([base64ToUint8Array(image.bytes)], { type: image.mimeType });
+        return new File([blob], image.fileName, { type: image.mimeType });
+      });
+
+      processFiles(extractedFiles);
     } catch (error) {
       console.error('Error extracting images:', error);
-      alert('Failed to extract images. Please try again.');
+      setConversionError('提取图片失败：' + String(error));
+      setTimeout(() => setConversionError(null), 10000);
     } finally {
       setExtractingImagesId(null);
     }

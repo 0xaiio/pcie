@@ -55,7 +55,16 @@ PCIE 的四个字母对应四项核心能力，同时呼应 PCIe 总线高速、
 - 点击 PDF 文件条目上的 **Preview & Edit Pages** 图标进入 PDF 工作台。
 - 工作台支持删除页面、抽取页面、组合文件等操作。
 - PDF 编辑功能由本地 [pdf-lib](./architecture.md#12-核心业务依赖) 完成，不依赖外部在线工具。
-- 条目上的 **Extract Images** 图标可提取 PDF 内嵌图片（目前支持 DCTDecode / JPEG 编码的图片）；**Convert Pages to Vector (SVG)** 图标通过服务端 mupdf 链路把页面转为 SVG。
+- 条目上的 **Extract Embedded Images** 图标可提取 PDF 内嵌图片。提取由服务端的 mupdf 渲染链路完成，覆盖全部常见编码路径（JPEG / DCTDecode、FlateDecode、CCITTFaxDecode、JBIG2Decode、JPXDecode、RunLengthDecode），以及直接写在内容流里的**内联图像**（`BI` / `ID` / `EI`）；输出统一为 PNG，避免二次有损压缩。
+- 提取出的图片以**图中标题（caption）命名**，例如 `Figure 2. Lossless gradient stored with FlateDecode.` 会导出为 `Lossless-gradient-stored-with-FlateDecode-p1.png`（`-p1` 为页码）。题注识别支持 `Figure` / `Fig.` / `Table` / `Algorithm` / `Listing` 与 `图` / `表` 等中英文写法；找不到对应题注时回退为 `<文件名>-p<页码>-img<序号>.png`。
+- 若文档里**没有位图**（例如 LaTeX / pdfTeX 论文常把插图直接画成矢量线条），点击会给出准确提示而不是笼统报错，此时应改用 **Convert Pages to Vector (SVG)** 图标按页导出。
+- **Convert Pages to Vector (SVG)** 图标通过服务端 mupdf 链路把页面转为 SVG。该图标的**右下角带一个下拉三角按钮**，点击后可选择其他目标格式：
+  - 可选格式：**SVG（默认，矢量）**、PNG、JPG、JPEG、WebP、BMP、TIFF、GIF。
+  - 主按钮保持原行为——直接点击即按页导出 SVG 矢量图，与旧版一致；菜单里的 SVG 项标注为 `default`。
+  - 选定格式后，**多页 PDF 的每一页**都会输出为该格式，文件名形如 `<原文件名>_page_001.png`。
+  - 位图格式按 300 DPI 渲染，足以打印级输出；SVG 为矢量输出，不经过光栅化，放大不失真。
+  - 菜单点击页面其他位置或按 `Esc` 即可关闭；转换进行中该行的两个按钮都会禁用，其他行不受影响。
+  - JPEG 不支持透明通道；BMP 输出为 8 位调色板索引（`BI_RLE8`）以控制体积，适合需要被老旧软件读取的场景。
 
 ## 5. AI 助手（AI Chat）
 

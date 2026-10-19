@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, ExternalLink } from 'lucide-react';
+import { X, ExternalLink } from './icons';
 import * as mammoth from 'mammoth';
 import type { AppFile } from '../features/files';
 
