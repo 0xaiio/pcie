@@ -6,6 +6,10 @@ PCIE 是一个**本地优先**的 Web 文档工作区：上传、排序、转换
 
 ![PCIE homepage initial state](./docs/assets/homepage-initial-state.png)
 
+应用图标（浏览器标签页 favicon）如下，矢量源文件为 [`public/favicon.svg`](./public/favicon.svg)；位图变体 `public/favicon.ico`（16/32/48）与 `public/apple-touch-icon.png`（180×180）由 [`scripts/generate-app-icons.py`](./scripts/generate-app-icons.py) 生成：
+
+![PCIE app icon](./public/favicon.svg)
+
 ## 克隆项目（SSH）
 
 ```bash

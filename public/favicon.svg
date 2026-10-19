@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="PCIE document processing">
+  <title>PCIE document processing</title>
+  <!-- Brand tile, color from --home-accent (#2d5f7e) -->
+  <rect x="1.5" y="1.5" width="61" height="61" rx="13" fill="#2d5f7e"/>
+  <!-- Processing orbit: 300 degree arc with a 60 degree gap at the top right -->
+  <path d="M51.80 24.69A20.5 20.5 0 1 1 37.31 10.20" fill="none" stroke="#f5efe7" stroke-width="2.8" stroke-linecap="round"/>
+  <!-- Arrowhead, pointing clockwise into the gap -->
+  <path d="M40.40 11.03L34.76 12.00L36.00 7.36Z" fill="#f5efe7"/>
+  <!-- Document with folded corner -->
+  <path d="M23 13H32L39 20V39Q39 41 37 41H25Q23 41 23 39Z" fill="#ffffff"/>
+  <path d="M32 13H39V20Z" fill="#dcebf5"/>
+  <path d="M32 13L39 20" fill="none" stroke="#a9cbe0" stroke-width="1.1" stroke-linecap="round"/>
+  <!-- Text lines -->
+  <rect x="25.5" y="23.5" width="12" height="2.2" rx="1.1" fill="#2d5f7e"/>
+  <rect x="25.5" y="29" width="9" height="2.2" rx="1.1" fill="#2d5f7e"/>
+  <rect x="25.5" y="34.5" width="11" height="2.2" rx="1.1" fill="#2d5f7e"/>
+</svg>
